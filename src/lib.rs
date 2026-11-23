@@ -7,6 +7,7 @@
 //! source -> lexer -> parser -> checker -> C codegen -> clang -> native binary
 //! ```
 
+pub mod ast;
 pub mod codegen;
 pub mod diag;
 pub mod lexer;
