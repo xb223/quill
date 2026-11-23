@@ -26,7 +26,7 @@ fn main() {
 ```
 
 ```console
-$ quillc run examples/hello.q
+$ quillc run examples/tour.q
 distance² = 25
 ```
 
@@ -52,7 +52,8 @@ parts that make the first month miserable:
 
 Quill is an early-stage compiler (v0.1). It already compiles real programs:
 functions, `let`/`mut`, `if`/`else`, `while`, `for`, `struct`s, strings with
-interpolation, arrays, and checked arithmetic.
+interpolation, arrays, stdin input, compound assignment, and checked arithmetic.
+The optimizer is clang's.
 
 See [docs/LANGUAGE.md](docs/LANGUAGE.md) for the language guide and
 [docs/DESIGN.md](docs/DESIGN.md) for the design rationale and roadmap.
