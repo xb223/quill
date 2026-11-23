@@ -1,0 +1,19 @@
+[package]
+name = "quill"
+version = "0.1.0"
+edition = "2021"
+description = "Quill: a friendly systems language with Rust-like safety and no borrow checker"
+license = "MIT"
+repository = "https://github.com/xb223/quill"
+
+[[bin]]
+name = "quillc"
+path = "src/main.rs"
+
+[lib]
+name = "quill"
+path = "src/lib.rs"
+
+[profile.release]
+lto = true
+codegen-units = 1
