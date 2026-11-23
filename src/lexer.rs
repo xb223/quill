@@ -60,6 +60,11 @@ pub enum TokenKind {
     Star,
     Slash,
     Percent,
+    PlusEq,
+    MinusEq,
+    StarEq,
+    SlashEq,
+    PercentEq,
     Assign,
     EqEq,
     NotEq,
@@ -113,6 +118,11 @@ impl TokenKind {
             TokenKind::Star => "`*`".into(),
             TokenKind::Slash => "`/`".into(),
             TokenKind::Percent => "`%`".into(),
+            TokenKind::PlusEq => "`+=`".into(),
+            TokenKind::MinusEq => "`-=`".into(),
+            TokenKind::StarEq => "`*=`".into(),
+            TokenKind::SlashEq => "`/=`".into(),
+            TokenKind::PercentEq => "`%=`".into(),
             TokenKind::Assign => "`=`".into(),
             TokenKind::EqEq => "`==`".into(),
             TokenKind::NotEq => "`!=`".into(),
@@ -190,19 +200,54 @@ impl<'a> Lexer<'a> {
                         TokenKind::Dot
                     }
                 }
-                '+' => self.single(TokenKind::Plus),
+                '+' => {
+                    self.bump();
+                    if self.peek() == Some('=') {
+                        self.bump();
+                        TokenKind::PlusEq
+                    } else {
+                        TokenKind::Plus
+                    }
+                }
                 '-' => {
                     self.bump();
                     if self.peek() == Some('>') {
                         self.bump();
                         TokenKind::Arrow
+                    } else if self.peek() == Some('=') {
+                        self.bump();
+                        TokenKind::MinusEq
                     } else {
                         TokenKind::Minus
                     }
                 }
-                '*' => self.single(TokenKind::Star),
-                '/' => self.single(TokenKind::Slash),
-                '%' => self.single(TokenKind::Percent),
+                '*' => {
+                    self.bump();
+                    if self.peek() == Some('=') {
+                        self.bump();
+                        TokenKind::StarEq
+                    } else {
+                        TokenKind::Star
+                    }
+                }
+                '/' => {
+                    self.bump();
+                    if self.peek() == Some('=') {
+                        self.bump();
+                        TokenKind::SlashEq
+                    } else {
+                        TokenKind::Slash
+                    }
+                }
+                '%' => {
+                    self.bump();
+                    if self.peek() == Some('=') {
+                        self.bump();
+                        TokenKind::PercentEq
+                    } else {
+                        TokenKind::Percent
+                    }
+                }
                 '=' => {
                     self.bump();
                     if self.peek() == Some('=') {
@@ -697,6 +742,24 @@ mod tests {
         let (_, diags) = lex("let x = &y;");
         assert!(diags.has_errors());
         assert!(diags.items[0].message.contains("no references"));
+    }
+
+    #[test]
+    fn compound_operators_lex() {
+        let (tokens, diags) = lex("+= -= *= /= %=");
+        assert!(!diags.has_errors());
+        let kinds: Vec<TokenKind> = tokens.into_iter().map(|t| t.kind).collect();
+        assert_eq!(
+            kinds,
+            vec![
+                TokenKind::PlusEq,
+                TokenKind::MinusEq,
+                TokenKind::StarEq,
+                TokenKind::SlashEq,
+                TokenKind::PercentEq,
+                TokenKind::Eof,
+            ]
+        );
     }
 
     #[test]

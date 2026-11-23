@@ -136,6 +136,8 @@ pub enum Stmt {
     Assign {
         target: Expr,
         value: Expr,
+        /// `Some(op)` for compound assignment (`+=`, `-=`, ...).
+        op: Option<BinOp>,
         span: Span,
     },
     Expr(Expr),

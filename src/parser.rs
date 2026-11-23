@@ -273,13 +273,24 @@ impl Parser {
                 _ => {
                     let expr = self.parse_expr()?;
 
-                    if self.eat(TokenKind::Assign) {
+                    let assignment = match &self.peek().kind {
+                        TokenKind::Assign => Some(None),
+                        TokenKind::PlusEq => Some(Some(BinOp::Add)),
+                        TokenKind::MinusEq => Some(Some(BinOp::Sub)),
+                        TokenKind::StarEq => Some(Some(BinOp::Mul)),
+                        TokenKind::SlashEq => Some(Some(BinOp::Div)),
+                        TokenKind::PercentEq => Some(Some(BinOp::Rem)),
+                        _ => None,
+                    };
+                    if let Some(op) = assignment {
+                        self.bump();
                         let value = self.parse_expr()?;
                         let span = expr.span.join(value.span);
                         self.expect(TokenKind::Semi, "`;` after assignment")?;
                         stmts.push(Stmt::Assign {
                             target: expr,
                             value,
+                            op,
                             span,
                         });
                         continue;

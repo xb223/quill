@@ -232,14 +232,55 @@ impl<'a> Generator<'a> {
                 let cname = self.bind(name);
                 self.line(&format!("{} {} = {};", ctype(&ty), cname, value_code))
             }
-            Stmt::Assign { target, value, .. } => {
+            Stmt::Assign {
+                target,
+                value,
+                op,
+                ..
+            } => {
                 let ty = target
                     .ty
                     .clone()
                     .unwrap_or_else(|| Type::void(target.span));
                 let target_code = self.emit_expr(target);
                 let value_code = self.emit_as(value, &ty);
-                self.line(&format!("{} = {};", target_code, value_code))
+                match op {
+                    None => self.line(&format!("{target_code} = {value_code};")),
+                    Some(op) => {
+                        // Evaluate the place once, then combine through a pointer so
+                        // `items[i] += 1` does not look up `i` twice.
+                        let ptr = self.fresh_temp();
+                        let combined = match op {
+                            BinOp::Add if ty.kind == TypeKind::Str => {
+                                format!("q_str_concat((*{ptr}), {value_code})")
+                            }
+                            BinOp::Add
+                            | BinOp::Sub
+                            | BinOp::Mul
+                            | BinOp::Div
+                            | BinOp::Rem => {
+                                if ty.kind == TypeKind::Float {
+                                    format!("((*{ptr}) {} {value_code})", op.symbol())
+                                } else {
+                                    let fn_name = match op {
+                                        BinOp::Add => "q_add_i64",
+                                        BinOp::Sub => "q_sub_i64",
+                                        BinOp::Mul => "q_mul_i64",
+                                        BinOp::Div => "q_div_i64",
+                                        BinOp::Rem => "q_mod_i64",
+                                        _ => unreachable!(),
+                                    };
+                                    format!("{fn_name}((*{ptr}), {value_code})")
+                                }
+                            }
+                            _ => unreachable!("compound assignment operator"),
+                        };
+                        self.line(&format!(
+                            "{{ {}* {ptr} = &({target_code}); *{ptr} = {combined}; }}",
+                            ctype(&ty)
+                        ))
+                    }
+                }
             }
             Stmt::Expr(expr) => match &expr.kind {
                 ExprKind::If { .. } => self.emit_if_stmt(expr),
@@ -747,6 +788,9 @@ impl<'a> Generator<'a> {
                     format!("{fn_name}({a}, {b})")
                 }
             }
+            "read_line" => "q_read_line()".to_string(),
+            "read_int" => "q_read_int()".to_string(),
+            "read_float" => "q_read_float()".to_string(),
             "assert" => {
                 let code = self.emit_expr(&args[0]);
                 let line = self.file.line_col(expr.span.start).0 + 1;

@@ -17,7 +17,20 @@ use crate::ast::*;
 use crate::diag::{Diags, Span};
 
 const BUILTINS: &[&str] = &[
-    "print", "println", "len", "push", "str", "int", "float", "abs", "min", "max", "assert",
+    "print",
+    "println",
+    "len",
+    "push",
+    "str",
+    "int",
+    "float",
+    "abs",
+    "min",
+    "max",
+    "assert",
+    "read_line",
+    "read_int",
+    "read_float",
 ];
 
 #[derive(Clone)]
@@ -141,6 +154,13 @@ pub fn check(program: &mut Program) -> Diags {
 
     let mut structs = HashMap::new();
     for s in &program.structs {
+        if s.fields.is_empty() {
+            diags.error_note(
+                s.span,
+                format!("struct `{}` has no fields", s.name),
+                "add at least one field (an empty struct cannot be constructed yet)",
+            );
+        }
         let mut seen = HashSet::new();
         let mut fields = Vec::new();
         for f in &s.fields {
@@ -400,9 +420,10 @@ impl Checker {
             Stmt::Assign {
                 target,
                 value,
+                op,
                 span,
             } => {
-                if !is_lvalue(target) {
+                if !is_assignable_target(target) {
                     self.diags.error_note(
                         target.span,
                         "cannot assign to this expression",
@@ -430,7 +451,23 @@ impl Checker {
                     return;
                 }
                 self.check_expr_expected(value, &target_ty, env);
-                let _ = span;
+
+                if let Some(op) = op {
+                    let supported = match op {
+                        BinOp::Add => is_numeric(&target_ty) || target_ty.kind == TypeKind::Str,
+                        _ => is_numeric(&target_ty),
+                    };
+                    if !supported {
+                        self.diags.error_note(
+                            *span,
+                            format!(
+                                "cannot apply `{}=` to a value of type `{target_ty}`",
+                                op.symbol()
+                            ),
+                            "compound assignment works on `int`, `float`, and `str` (for `+=`)",
+                        );
+                    }
+                }
             }
             Stmt::Expr(expr) => {
                 self.check_expr(expr, env);
@@ -889,6 +926,18 @@ impl Checker {
             return self.check_builtin(name, args, span, env);
         }
 
+        if name == "main" {
+            for arg in args.iter_mut() {
+                self.check_expr(arg, env);
+            }
+            self.diags.error_note(
+                span,
+                "`main` cannot be called directly",
+                "call a helper function instead; `main` is the program entry point",
+            );
+            return Type::error(span);
+        }
+
         let Some(sig) = self.ctx.fns.get(name).cloned() else {
             let mut candidates: Vec<String> = self.ctx.fns.keys().cloned().collect();
             candidates.extend(BUILTINS.iter().map(|s| s.to_string()));
@@ -1106,6 +1155,18 @@ impl Checker {
                 }
                 Type::void(span)
             }
+            "read_line" => {
+                self.wrong_arity(name, args, 0, span, env);
+                Type::str(span)
+            }
+            "read_int" => {
+                self.wrong_arity(name, args, 0, span, env);
+                Type::int(span)
+            }
+            "read_float" => {
+                self.wrong_arity(name, args, 0, span, env);
+                Type::float(span)
+            }
             _ => unreachable!("unknown builtin"),
         }
     }
@@ -1319,11 +1380,13 @@ fn describe_params(params: &[Type]) -> String {
         .join(", ")
 }
 
-fn is_lvalue(expr: &Expr) -> bool {
-    matches!(
-        expr.kind,
-        ExprKind::Ident(_) | ExprKind::Field { .. } | ExprKind::Index { .. }
-    )
+fn is_assignable_target(expr: &Expr) -> bool {
+    match &expr.kind {
+        ExprKind::Ident(_) => true,
+        ExprKind::Field { object, .. } => is_assignable_target(object),
+        ExprKind::Index { .. } => true,
+        _ => false,
+    }
 }
 
 fn block_diverges(block: &Block) -> bool {
@@ -1611,6 +1674,15 @@ mod tests {
     #[test]
     fn annotation_drives_array_inference() {
         check_ok("fn main() { let xs: [float] = [1, 2, 3]; let y = xs[0] + 0.5; }");
+    }
+
+    #[test]
+    fn compound_assignment_checks_types() {
+        check_ok(
+            "fn main() { let mut x = 1; x += 2; x *= 3; let mut s = \"a\"; s += \"b\"; }",
+        );
+        let errors = check_err("fn main() { let mut ok = true; ok += false; }");
+        assert!(errors.iter().any(|e| e.contains("cannot apply `+=`")));
     }
 
     #[test]

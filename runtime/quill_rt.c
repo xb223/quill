@@ -2,6 +2,8 @@
  * arena allocator. Kept deliberately small and readable; the generated program
  * only ever touches the functions declared in quill_rt.h. */
 
+#define _POSIX_C_SOURCE 200809L
+
 #include "quill_rt.h"
 
 #include <errno.h>
@@ -9,6 +11,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/types.h>
 
 /* ---- arena ------------------------------------------------------------- */
 
@@ -203,6 +206,39 @@ double q_str_to_f64(const QStr* s) {
         q_panic(message);
     }
     return value;
+}
+
+/* ---- input ------------------------------------------------------------- */
+
+QStr* q_read_line(void) {
+    char* line = NULL;
+    size_t cap = 0;
+    ssize_t n = getline(&line, &cap, stdin);
+    if (n < 0) {
+        free(line);
+        return q_str_lit("", 0);
+    }
+    while (n > 0 && (line[n - 1] == '\n' || line[n - 1] == '\r')) {
+        n--;
+    }
+    char* copy = (char*)q_alloc(n + 1);
+    if (n > 0) {
+        memcpy(copy, line, (size_t)n);
+    }
+    copy[n] = '\0';
+    QStr* s = (QStr*)q_alloc((int64_t)sizeof(QStr));
+    s->len = n;
+    s->data = copy;
+    free(line);
+    return s;
+}
+
+int64_t q_read_int(void) {
+    return q_str_to_i64(q_read_line());
+}
+
+double q_read_float(void) {
+    return q_str_to_f64(q_read_line());
 }
 
 /* ---- output ------------------------------------------------------------ */

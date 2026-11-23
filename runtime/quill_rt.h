@@ -40,6 +40,12 @@ bool q_str_eq(const QStr* a, const QStr* b);
 int64_t q_str_to_i64(const QStr* s);
 double q_str_to_f64(const QStr* s);
 
+/* ---- input ------------------------------------------------------------- */
+
+QStr* q_read_line(void);
+int64_t q_read_int(void);
+double q_read_float(void);
+
 /* ---- output ------------------------------------------------------------ */
 
 void q_print_i64(int64_t v);
