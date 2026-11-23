@@ -15,6 +15,8 @@ pub enum TypeKind {
     Bool,
     Str,
     Void,
+    /// Internal placeholder used to stop error cascades; never reaches codegen.
+    Error,
     Array(Box<Type>),
     Named(String),
 }
@@ -44,8 +46,16 @@ impl Type {
         Type::new(TypeKind::Void, span)
     }
 
+    pub fn error(span: Span) -> Self {
+        Type::new(TypeKind::Error, span)
+    }
+
     pub fn is_void(&self) -> bool {
         self.kind == TypeKind::Void
+    }
+
+    pub fn is_error(&self) -> bool {
+        self.kind == TypeKind::Error
     }
 }
 
@@ -63,6 +73,7 @@ impl std::fmt::Display for Type {
             TypeKind::Bool => write!(f, "bool"),
             TypeKind::Str => write!(f, "str"),
             TypeKind::Void => write!(f, "void"),
+            TypeKind::Error => write!(f, "<error>"),
             TypeKind::Array(inner) => write!(f, "[{inner}]"),
             TypeKind::Named(name) => write!(f, "{name}"),
         }

@@ -7,7 +7,7 @@
 use std::fmt::Write as _;
 
 /// A byte range in a source file.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
 pub struct Span {
     pub start: usize,
     pub end: usize,
