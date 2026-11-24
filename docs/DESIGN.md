@@ -146,6 +146,7 @@ the runtime and cannot be optimized away.
 
 - [x] Lexer, parser, type checker, C backend, CLI
 - [x] Strings, interpolation, arrays, structs, checked arithmetic
+- [x] C interop: `#add <header.h>` + `extern fn`, plus a bundled `term` library
 - [ ] Methods (`fn Point.sum(self) -> int`) declared next to the struct
 - [ ] Enums + exhaustive `match`
 - [ ] `T?` optionals with `if let` and `??`
@@ -154,7 +155,7 @@ the runtime and cannot be optimized away.
 - [ ] Precise mark-and-sweep GC (same language surface)
 - [ ] Modules and a tiny package manager
 - [ ] Structured concurrency
-- [ ] C FFI (explicit, audited boundary)
+- [ ] Richer C FFI (structs and callbacks; scalar/string interop exists today)
 - [ ] Better diagnostics: suggestions, machine-readable JSON
 - [ ] Self-hosting exploration (a compiled language should be able to compile
       itself eventually)

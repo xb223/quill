@@ -18,8 +18,9 @@ the language yet.
 10. [Control flow](#10-control-flow)
 11. [Built-in functions](#11-built-in-functions)
 12. [Errors and panics](#12-errors-and-panics)
-13. [Grammar summary](#13-grammar-summary)
-14. [Not in the language yet](#14-not-in-the-language-yet)
+13. [C libraries: `#add` and `extern`](#13-c-libraries-add-and-extern)
+14. [Grammar summary](#14-grammar-summary)
+15. [Not in the language yet](#15-not-in-the-language-yet)
 
 ---
 
@@ -390,10 +391,83 @@ Panics are preferable to continuing with corrupted memory. There are no
 undefined-behavior traps in safe Quill code: no null dereference, no
 uninitialized reads, no silent overflow, no out-of-bounds access.
 
-## 13. Grammar summary
+## 13. C libraries: `#add` and `extern`
+
+Quill calls into C libraries with a directive and a declaration. `#add` brings in
+a header (like `#include`, but it is part of the language and the compiler also
+knows how to link the matching library):
+
+```quill
+#add <math.h>
+
+extern fn sqrt(x: float) -> float;
+
+fn main() {
+    println(sqrt(16.0));   // 4
+}
+```
+
+`#add <header.h>` does three things: it includes the header in the generated C,
+it links the matching library (`<math.h>` → `-lm`, `<ncurses.h>` → `-lncurses`),
+and it lets `extern fn` declarations type-check against real signatures. You
+still declare each function you call with `extern fn`, which is what gives you
+friendly Quill types and type errors at compile time.
+
+**The bundled `term` library.** Quill ships a small ncurses-like library for
+real-time terminal programs (games, dashboards, TUIs). Add it with `#add
+<term.h>`:
+
+```quill
+#add <term.h>
+
+extern fn term_init() -> int;
+extern fn term_cleanup() -> void;
+extern fn term_move(row: int, col: int) -> void;
+extern fn term_print(s: str) -> void;
+extern fn term_fg(color: int) -> void;
+extern fn term_reset_colors() -> void;
+extern fn term_getch_timeout(ms: int) -> int;
+
+fn main() {
+    term_init();
+    term_move(2, 4);
+    term_fg(2);                 // green
+    term_print("press a key");
+    term_reset_colors();
+    term_getch_timeout(5000);   // wait up to 5s
+    term_cleanup();
+}
+```
+
+| `term` function | What it does |
+| --- | --- |
+| `term_init()` / `term_cleanup()` | enter/leave raw mode, alternate screen |
+| `term_clear()` | clear the screen |
+| `term_move(row, col)` | move the cursor (0-indexed) |
+| `term_print(s)` | print at the cursor |
+| `term_fg(n)` / `term_bg(n)` | set color 0–15 |
+| `term_reset_colors()` | back to default colors |
+| `term_getch()` | block until a key, return its code |
+| `term_getch_timeout(ms)` | wait up to `ms`; `0` means "poll" |
+| `term_now_ms()` | monotonic time in milliseconds |
+| `term_sleep_ms(ms)` | sleep |
+| `term_hide_cursor()` / `term_show_cursor()` | cursor visibility |
+| `term_mouse_on()` / `term_mouse_off()` / `term_mouse_event(...)` | mouse input |
+
+Key codes are plain integers (`'q'` is `113`). Special keys such as arrows
+return negative values declared in `term.h` (`TERM_KEY_UP`, `TERM_KEY_DOWN`,
+and so on). See [`examples/pong.q`](../examples/pong.q) for a complete real-time
+game, and [`examples/term_demo.q`](../examples/term_demo.q) for a tour.
+
+A `str` crossing into C is passed as a NUL-terminated C string automatically;
+`int`, `float` and `bool` map to `int64_t`, `double` and `bool`.
+
+## 14. Grammar summary
 
 ```text
-program    = { structDef | fnDef }
+program    = { addDirective | externDecl | structDef | fnDef }
+addDirective = "#add" "<" name ">"
+externDecl = "extern" "fn" ident "(" [ param { "," param } ] ")" [ "->" type ] ";"
 structDef  = "struct" ident "{" [ field { "," field } [","] ] "}"
 field      = ident ":" type
 fnDef      = "fn" ident "(" [ param { "," param } ] ")" [ "->" type ] block
@@ -418,7 +492,7 @@ primary    = int | float | "true" | "false" | string | ident
            | "for" ident "in" ( expr ".." expr | expr ) block
 ```
 
-## 14. Not in the language yet
+## 15. Not in the language yet
 
 These are deliberately deferred until they can be added without steepening the
 learning curve:
@@ -430,7 +504,8 @@ learning curve:
 * `impl` blocks, traits, macros — probably never in Rust's form
 * modules and packages
 * threads / async
-* C FFI
+* richer C FFI (structs and callbacks across the boundary; scalars, strings and
+  pointers-to-opaque handles already work)
 * automatic memory reclamation (v0.1 uses a process-lifetime arena; see
   [DESIGN.md](DESIGN.md))
 * Unicode-aware string indexing and length

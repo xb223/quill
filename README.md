@@ -30,6 +30,24 @@ $ quillc run examples/tour.q
 distance² = 25
 ```
 
+Calling C libraries is a directive and a declaration:
+
+```quill
+#add <math.h>
+extern fn sqrt(x: float) -> float;
+
+fn main() {
+    println(sqrt(16.0));   // 4
+}
+```
+
+The bundled `term` library gives you cursor control, colors, non-blocking keys
+and timing — enough for real-time terminal games:
+
+```console
+$ quillc run examples/pong.q
+```
+
 ## Why another language?
 
 Quill keeps the good parts of Rust — value semantics, immutable bindings,
@@ -53,7 +71,9 @@ parts that make the first month miserable:
 Quill is an early-stage compiler (v0.1). It already compiles real programs:
 functions, `let`/`mut`, `if`/`else`, `while`, `for`, `struct`s, strings with
 interpolation, arrays, stdin input, compound assignment, and checked arithmetic.
-The optimizer is clang's.
+It calls C libraries with `#add <header.h>` and `extern fn`, and ships a small
+ncurses-like `term` library for real-time terminal programs — see
+[`examples/pong.q`](examples/pong.q). The optimizer is clang's.
 
 See [docs/LANGUAGE.md](docs/LANGUAGE.md) for the language guide and
 [docs/DESIGN.md](docs/DESIGN.md) for the design rationale and roadmap.
