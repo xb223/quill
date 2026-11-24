@@ -161,13 +161,17 @@ QStr* q_str_of_bool(bool v) {
     return q_str_lit(v ? "true" : "false", v ? 4 : 5);
 }
 
-static char* q_str_cstring(const QStr* s) {
+char* q_str_cstr(const QStr* s) {
     char* buffer = (char*)q_alloc(s->len + 1);
     if (s->len > 0) {
         memcpy(buffer, s->data, (size_t)s->len);
     }
     buffer[s->len] = '\0';
     return buffer;
+}
+
+static char* q_str_cstring(const QStr* s) {
+    return q_str_cstr(s);
 }
 
 int64_t q_str_to_i64(const QStr* s) {

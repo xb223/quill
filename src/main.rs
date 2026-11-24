@@ -152,8 +152,9 @@ fn c_compiler() -> String {
     env::var("CC").unwrap_or_else(|_| "clang".to_string())
 }
 
-/// Write the generated C and runtime to a temporary directory.
-fn write_project(dir: &Path, compilation: &Compilation) {
+/// Write the generated C and runtime to a temporary directory. Returns the list
+/// of extra `.c` files that must be compiled alongside `main.c`.
+fn write_project(dir: &Path, compilation: &Compilation) -> Vec<PathBuf> {
     if let Err(error) = fs::create_dir_all(dir) {
         eprintln!("error: cannot create temp directory: {error}");
         process::exit(1);
@@ -169,24 +170,50 @@ fn write_project(dir: &Path, compilation: &Compilation) {
             process::exit(1);
         }
     }
+
+    // Bundled libraries declared with `#add` are compiled from embedded source.
+    let mut extra_sources = Vec::new();
+    for library in &compilation.adds {
+        match library.as_str() {
+            "term.h" => {
+                let path = dir.join("term.c");
+                if let Err(error) = fs::write(&path, quill::TERM_C) {
+                    eprintln!("error: cannot write `term.c`: {error}");
+                    process::exit(1);
+                }
+                if let Err(error) = fs::write(dir.join("term.h"), quill::TERM_H) {
+                    eprintln!("error: cannot write `term.h`: {error}");
+                    process::exit(1);
+                }
+                extra_sources.push(path);
+            }
+            _ => {}
+        }
+    }
+    extra_sources
 }
 
 fn build_native(compilation: &Compilation, output: &Path) -> Result<(), String> {
     let dir = temp_dir();
-    write_project(&dir, compilation);
-    let main_c = dir.join("main.c");
-    let runtime_c = dir.join("quill_rt.c");
+    let extra_sources = write_project(&dir, compilation);
 
-    let status = Command::new(c_compiler())
-        .arg("-std=gnu11")
+    let mut cmd = Command::new(c_compiler());
+    cmd.arg("-std=gnu11")
         .arg("-O2")
         .arg("-Wno-parentheses-equality")
         .arg("-o")
         .arg(output)
-        .arg(&main_c)
-        .arg(&runtime_c)
-        .arg("-lm")
-        .status();
+        .arg(dir.join("main.c"))
+        .arg(dir.join("quill_rt.c"))
+        .args(&extra_sources)
+        .arg("-lm");
+    for lib in &compilation.adds {
+        for flag in quill::library_link_flags(lib) {
+            cmd.arg(flag);
+        }
+    }
+
+    let status = cmd.status();
 
     let result = match status {
         Ok(status) if status.success() => Ok(()),
@@ -208,10 +235,11 @@ fn build_native(compilation: &Compilation, output: &Path) -> Result<(), String> 
 
 fn run_native(compilation: &Compilation) {
     let dir = temp_dir();
-    write_project(&dir, compilation);
+    let extra_sources = write_project(&dir, compilation);
     let binary = dir.join("program");
 
-    let compile = Command::new(c_compiler())
+    let mut compile = Command::new(c_compiler());
+    compile
         .arg("-std=gnu11")
         .arg("-O2")
         .arg("-Wno-parentheses-equality")
@@ -219,10 +247,17 @@ fn run_native(compilation: &Compilation) {
         .arg(&binary)
         .arg(dir.join("main.c"))
         .arg(dir.join("quill_rt.c"))
-        .arg("-lm")
-        .status();
+        .args(&extra_sources)
+        .arg("-lm");
+    for lib in &compilation.adds {
+        for flag in quill::library_link_flags(lib) {
+            compile.arg(flag);
+        }
+    }
 
-    match compile {
+    let status = compile.status();
+
+    match status {
         Ok(status) if status.success() => {}
         Ok(status) => {
             eprintln!(

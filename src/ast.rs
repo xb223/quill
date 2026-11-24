@@ -82,8 +82,24 @@ impl std::fmt::Display for Type {
 
 #[derive(Clone, Debug)]
 pub struct Program {
+    pub adds: Vec<AddDirective>,
+    pub externs: Vec<ExternDecl>,
     pub structs: Vec<StructDef>,
     pub fns: Vec<FnDef>,
+}
+
+#[derive(Clone, Debug)]
+pub struct AddDirective {
+    pub library: String,
+    pub span: Span,
+}
+
+#[derive(Clone, Debug)]
+pub struct ExternDecl {
+    pub name: String,
+    pub params: Vec<Param>,
+    pub ret: Type,
+    pub span: Span,
 }
 
 #[derive(Clone, Debug)]

@@ -40,6 +40,9 @@ bool q_str_eq(const QStr* a, const QStr* b);
 int64_t q_str_to_i64(const QStr* s);
 double q_str_to_f64(const QStr* s);
 
+/* NUL-terminated copy in arena memory, for passing to C libraries. */
+char* q_str_cstr(const QStr* s);
+
 /* ---- input ------------------------------------------------------------- */
 
 QStr* q_read_line(void);

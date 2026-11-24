@@ -23,9 +23,46 @@ pub const VERSION: &str = env!("CARGO_PKG_VERSION");
 pub const RUNTIME_C: &str = include_str!("../runtime/quill_rt.c");
 pub const RUNTIME_H: &str = include_str!("../runtime/quill_rt.h");
 
+/// The bundled terminal library, used by `#add <term.h>`.
+pub const TERM_C: &str = include_str!("../runtime/term.c");
+pub const TERM_H: &str = include_str!("../runtime/term.h");
+
+/// Libraries that ship with Quill itself, as (header, source, extra link flags).
+pub fn bundled_source(library: &str) -> Option<&'static str> {
+    match library {
+        "term.h" => Some(TERM_C),
+        _ => None,
+    }
+}
+
+/// Extra C compiler flags needed for a system library header.
+pub fn library_link_flags(library: &str) -> Vec<String> {
+    match library {
+        // Bundled libraries are compiled from source; no -l needed.
+        "term.h" => Vec::new(),
+        // A header such as `math.h` or `ncurses.h` maps to `-lm` / `-lncurses`.
+        other => {
+            let stem = other.strip_suffix(".h").unwrap_or(other);
+            // Headers without a matching system library, or whose library has
+            // a different name than the header (`math.h` -> `-lm`, already
+            // always linked).
+            const NO_LIB: &[&str] = &[
+                "stdio", "stdlib", "string", "stdint", "stdbool", "stddef", "time",
+                "unistd", "fcntl", "math", "errno", "ctype", "assert",
+            ];
+            if NO_LIB.contains(&stem) {
+                Vec::new()
+            } else {
+                vec![format!("-l{stem}")]
+            }
+        }
+    }
+}
+
 pub struct Compilation {
     pub file: SourceFile,
     pub c_source: String,
+    pub adds: Vec<String>,
 }
 
 /// Compile Quill source to C. On failure, returns the source file together with
@@ -49,5 +86,6 @@ pub fn compile(name: &str, source: &str) -> Result<Compilation, (SourceFile, Dia
     }
 
     let c_source = codegen::generate(&program, &file);
-    Ok(Compilation { file, c_source })
+    let adds = program.adds.iter().map(|a| a.library.clone()).collect();
+    Ok(Compilation { file, c_source, adds })
 }

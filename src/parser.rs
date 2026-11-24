@@ -101,24 +101,80 @@ impl Parser {
     // --------------------------------------------------------------- program
 
     fn parse_program(&mut self) -> Option<Program> {
+        let mut adds = Vec::new();
+        let mut externs = Vec::new();
         let mut structs = Vec::new();
         let mut fns = Vec::new();
 
         while !self.at_eof() {
-            if self.at(&TokenKind::Struct) {
+            if self.at(&TokenKind::Add) {
+                adds.push(self.parse_add()?);
+            } else if self.at(&TokenKind::Extern) {
+                externs.push(self.parse_extern()?);
+            } else if self.at(&TokenKind::Struct) {
                 structs.push(self.parse_struct()?);
             } else if self.at(&TokenKind::Fn) {
                 fns.push(self.parse_fn()?);
             } else {
                 self.err_here(format!(
-                    "expected `fn` or `struct` at the top level, found {}",
+                    "expected `#add`, `extern`, `fn`, or `struct` at the top level, found {}",
                     self.peek().kind.describe()
                 ));
                 self.bump();
             }
         }
 
-        Some(Program { structs, fns })
+        Some(Program { adds, externs, structs, fns })
+    }
+
+    fn parse_extern(&mut self) -> Option<ExternDecl> {
+        let extern_token = self.bump(); // consume extern
+        self.expect(TokenKind::Fn, "`fn` after `extern`")?;
+        let (name, name_span) = self.expect_ident("a function name")?;
+        self.expect(TokenKind::LParen, "`(` after function name")?;
+
+        let mut params = Vec::new();
+        while !self.at(&TokenKind::RParen) {
+            if self.at_eof() {
+                self.err(name_span, "unclosed `extern fn`: missing `)`");
+                return None;
+            }
+            let (param_name, param_span) = self.expect_ident("a parameter name")?;
+            self.expect(TokenKind::Colon, "`:` after parameter name")?;
+            let ty = self.parse_type()?;
+            let span = param_span.join(ty.span);
+            params.push(Param { name: param_name, ty, span });
+            if !self.eat(TokenKind::Comma) {
+                break;
+            }
+        }
+        self.expect(TokenKind::RParen, "`)` after parameters")?;
+
+        let ret = if self.eat(TokenKind::Arrow) {
+            self.parse_type()?
+        } else {
+            Type::void(name_span)
+        };
+
+        self.expect(TokenKind::Semi, "`;` after extern declaration")?;
+        let span = extern_token.span.join(self.peek().span);
+        Some(ExternDecl { name, params, ret, span })
+    }
+
+    fn parse_add(&mut self) -> Option<AddDirective> {
+        let add_token = self.bump(); // consume Add token
+        // The library name should be the next Ident token
+        if let TokenKind::Ident(lib_name) = &self.peek().kind {
+            let lib_name = lib_name.clone();
+            let span = self.bump().span;
+            Some(AddDirective {
+                library: lib_name,
+                span: add_token.span.join(span),
+            })
+        } else {
+            self.err_here("expected library name after `#add`");
+            None
+        }
     }
 
     fn parse_struct(&mut self) -> Option<StructDef> {

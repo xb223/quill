@@ -39,6 +39,10 @@ pub enum TokenKind {
     Struct,
     True,
     False,
+    Extern,
+
+    // Directives.
+    Add,
 
     // Delimiters.
     LParen,
@@ -101,6 +105,7 @@ impl TokenKind {
             TokenKind::Struct => "`struct`".into(),
             TokenKind::True => "`true`".into(),
             TokenKind::False => "`false`".into(),
+            TokenKind::Extern => "`extern`".into(),
             TokenKind::LParen => "`(`".into(),
             TokenKind::RParen => "`)`".into(),
             TokenKind::LBrace => "`{`".into(),
@@ -133,6 +138,7 @@ impl TokenKind {
             TokenKind::AndAnd => "`&&`".into(),
             TokenKind::OrOr => "`||`".into(),
             TokenKind::Bang => "`!`".into(),
+            TokenKind::Add => "`#add`".into(),
             TokenKind::Eof => "end of file".into(),
         }
     }
@@ -314,6 +320,10 @@ impl<'a> Lexer<'a> {
                         TokenKind::Eof
                     }
                 }
+                '#' => {
+                    self.directive(diags, start);
+                    continue; // directive() pushes tokens directly
+                }
                 other => {
                     let span = self.span_from(start);
                     self.bump();
@@ -412,6 +422,7 @@ impl<'a> Lexer<'a> {
             "struct" => TokenKind::Struct,
             "true" => TokenKind::True,
             "false" => TokenKind::False,
+            "extern" => TokenKind::Extern,
             _ => TokenKind::Ident(text.to_string()),
         }
     }
@@ -637,6 +648,71 @@ impl<'a> Lexer<'a> {
             "unterminated string inside interpolation",
         );
     }
+
+    fn directive(&mut self, diags: &mut Diags, start: usize) {
+        // Consume '#'
+        self.bump();
+        // Skip whitespace
+        while matches!(self.peek(), Some(' ' | '\t')) {
+            self.bump();
+        }
+        // Check for "add"
+        if self.peek() == Some('a')
+            && self.peek_after(1) == Some('d')
+            && self.peek_after(2) == Some('d')
+        {
+            self.bump(); // a
+            self.bump(); // d
+            self.bump(); // d
+            // Skip whitespace
+            while matches!(self.peek(), Some(' ' | '\t')) {
+                self.bump();
+            }
+            // Expect '<'
+            if self.peek() == Some('<') {
+                self.bump();
+                let lib_start = self.pos;
+                while let Some(c) = self.peek() {
+                    if c == '>' {
+                        break;
+                    }
+                    self.bump();
+                }
+                let lib_name = &self.src[lib_start..self.pos];
+                if self.peek() == Some('>') {
+                    self.bump();
+                    // Store the library name as an identifier token with a special marker
+                    // We'll use Ident with a prefix to mark it as an add directive
+                    self.tokens.push(Token {
+                        kind: TokenKind::Add,
+                        span: Span::new(start, self.pos),
+                    });
+                    // Also push the library name as a separate token
+                    self.tokens.push(Token {
+                        kind: TokenKind::Ident(lib_name.to_string()),
+                        span: Span::new(lib_start, self.pos),
+                    });
+                    return;
+                } else {
+                    diags.error(
+                        Span::new(start, self.pos),
+                        "expected `>` after library name in `#add`",
+                    );
+                }
+            } else {
+                diags.error(
+                    Span::new(start, self.pos),
+                    "expected `<library.h>` after `#add`",
+                );
+            }
+        } else {
+            diags.error(
+                Span::new(start, self.pos),
+                "unknown directive; only `#add <library.h>` is supported",
+            );
+        }
+        self.push(start, TokenKind::Eof);
+    }
 }
 
 #[cfg(test)]
@@ -760,6 +836,46 @@ mod tests {
                 TokenKind::Eof,
             ]
         );
+    }
+
+    #[test]
+    fn add_directive_lexes_library_name() {
+        assert_eq!(
+            kinds("#add <math.h>"),
+            vec![
+                TokenKind::Add,
+                TokenKind::Ident("math.h".into()),
+                TokenKind::Eof,
+            ]
+        );
+    }
+
+    #[test]
+    fn extern_is_a_keyword() {
+        assert_eq!(
+            kinds("extern fn sqrt(x: float) -> float;"),
+            vec![
+                TokenKind::Extern,
+                TokenKind::Fn,
+                TokenKind::Ident("sqrt".into()),
+                TokenKind::LParen,
+                TokenKind::Ident("x".into()),
+                TokenKind::Colon,
+                TokenKind::Ident("float".into()),
+                TokenKind::RParen,
+                TokenKind::Arrow,
+                TokenKind::Ident("float".into()),
+                TokenKind::Semi,
+                TokenKind::Eof,
+            ]
+        );
+    }
+
+    #[test]
+    fn malformed_add_directive_is_reported() {
+        let (_, diags) = lex("#add math.h");
+        assert!(diags.has_errors());
+        assert!(diags.items[0].message.contains("expected"));
     }
 
     #[test]

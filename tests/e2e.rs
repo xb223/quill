@@ -480,3 +480,56 @@ fn missing_return_path_is_rejected() {
         "{text}"
     );
 }
+
+#[test]
+fn extern_c_functions_from_system_header() {
+    expect_stdout(
+        r#"#add <math.h>
+        extern fn sqrt(x: float) -> float;
+        extern fn pow(base: float, exp: float) -> float;
+        fn main() {
+            println(sqrt(16.0));
+            println(pow(2.0, 10.0));
+        }"#,
+        "4\n1024\n",
+    );
+}
+
+#[test]
+fn term_header_is_bundled_and_included() {
+    let c = compile_or_panic(
+        r#"#add <term.h>
+        extern fn term_move(row: int, col: int) -> void;
+        extern fn term_print(s: str) -> void;
+        fn main() {
+            term_move(1, 1);
+            term_print("hi");
+        }"#,
+    );
+    assert!(c.contains("#include \"term.h\""), "{c}");
+    assert!(c.contains("term_move((1LL), (1LL))"), "{c}");
+    // Real strings cross the FFI boundary as NUL-terminated C strings.
+    assert!(c.contains("term_print(q_str_cstr("), "{c}");
+}
+
+#[test]
+fn extern_calls_pass_strings_as_c_strings() {
+    let c = compile_or_panic(
+        r#"#add <stdio.h>
+        extern fn puts(s: str) -> int;
+        fn main() {
+            puts("hello from C");
+        }"#,
+    );
+    assert!(c.contains("puts(q_str_cstr("), "{c}");
+}
+
+#[test]
+fn extern_function_arg_types_are_checked() {
+    let text = expect_compile_error(
+        r#"#add <math.h>
+        extern fn sqrt(x: float) -> float;
+        fn main() { println(sqrt("nope")); }"#,
+    );
+    assert!(text.contains("expected `float`, found `str`"), "{text}");
+}

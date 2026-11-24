@@ -115,6 +115,45 @@ pub fn check(program: &mut Program) -> Diags {
     }
 
     let mut fn_sigs: HashMap<String, FnSig> = HashMap::new();
+
+    // Register extern functions first
+    for ext in &program.externs {
+        if BUILTINS.contains(&ext.name.as_str()) {
+            diags.error_note(
+                ext.span,
+                format!("`{}` is a built-in function", ext.name),
+                "choose a different name",
+            );
+            continue;
+        }
+        if struct_names.contains(&ext.name) {
+            diags.error(
+                ext.span,
+                format!("`{}` is already used as a struct name", ext.name),
+            );
+            continue;
+        }
+        if fn_sigs.contains_key(&ext.name) {
+            diags.error(ext.span, format!("duplicate function `{}`", ext.name));
+            continue;
+        }
+
+        let mut params = Vec::new();
+        for p in &ext.params {
+            validate_type(&p.ty, &struct_names, false, &mut diags);
+            params.push(p.ty.clone());
+        }
+        validate_type(&ext.ret, &struct_names, true, &mut diags);
+
+        fn_sigs.insert(
+            ext.name.clone(),
+            FnSig {
+                params,
+                ret: ext.ret.clone(),
+            },
+        );
+    }
+
     for f in &program.fns {
         if BUILTINS.contains(&f.name.as_str()) {
             diags.error_note(
